@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 )
 
+// Store Is the bas ekey-value store object
 type Store struct {
 	dataDir       string
 	fileName      string
@@ -18,7 +19,6 @@ type Store struct {
 }
 
 var (
-	ErrStoreClosed       = errors.New("store already closed")
 	ErrKeyNotFound       = errors.New("key not found in store")
 	ErrStoreFileNotFound = errors.New("store file not found")
 	recodSeparator       = []byte("<split>")
@@ -194,6 +194,7 @@ func (l *Store) Delete(key []byte) error {
 	return nil
 }
 
+// Get Find a value by its key, it returns ErrKeyNotFound if the key does not exists into the store
 func (l *Store) Get(key []byte) ([]byte, error) {
 	scanner, close, err := l.openStoreFileScanner(os.O_RDONLY)
 	if err != nil {
@@ -213,6 +214,7 @@ func (l *Store) Get(key []byte) ([]byte, error) {
 	return nil, ErrKeyNotFound
 }
 
+// Put Insert or delete a key-value record
 func (l *Store) Put(key, value []byte) error {
 	buffer, err := l.createRecordBuffer(key, value)
 	if err != nil {
