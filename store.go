@@ -49,19 +49,22 @@ func NewStore(dataDir, fileName string) (*Store, error) {
 	return store, nil
 }
 
-func (*Store) createRecordBuffer(key, value []byte) (*bytes.Buffer, error) {
-	line := bytes.Join([][]byte{key, value}, recordSeparator)
-
-	return bytes.NewBuffer(line), nil
-}
-
-func (*Store) getKeyAndValueFromBuffer(buffer *bytes.Buffer) ([]byte, []byte, bool) {
-	splitRecord := bytes.Split(buffer.Bytes(), recordSeparator)
-	if len(splitRecord) != 2 {
-		return nil, nil, false
+func (*Store) createRecordBuffer(key string, value []byte) (*bytes.Buffer, error) {
+	var buffer bytes.Buffer
+	if _, err := fmt.Fprintf(&buffer, "%s%s%s", key, recordSeparator, value); err != nil {
+		return nil, err
 	}
 
-	return splitRecord[0], splitRecord[1], true
+	return &buffer, nil
+}
+
+func (*Store) getKeyAndValueFromBuffer(buffer *bytes.Buffer) (string, []byte, bool) {
+	splitRecord := bytes.Split(buffer.Bytes(), recordSeparator)
+	if len(splitRecord) != 2 {
+		return "", nil, false
+	}
+
+	return string(splitRecord[0]), splitRecord[1], true
 }
 
 func (l *Store) openStoreFileScanner(flag int) (*bufio.Scanner, func() error, error) {
@@ -89,7 +92,7 @@ func (l *Store) loadKeyCacheFromStoreFile() error {
 
 	for scanner.Scan() {
 		if key, _, exists := l.getKeyAndValueFromBuffer(bytes.NewBuffer(scanner.Bytes())); exists {
-			l.keyCache[string(key)] = struct{}{}
+			l.keyCache[key] = struct{}{}
 		}
 	}
 
@@ -110,7 +113,7 @@ func (l *Store) insertIntoStoreFile(buffer *bytes.Buffer) error {
 	return nil
 }
 
-func (l *Store) updateFromStoreFile(key []byte, buffer *bytes.Buffer) error {
+func (l *Store) updateFromStoreFile(key string, buffer *bytes.Buffer) error {
 	tempFile, err := os.CreateTemp(l.dataDir, fmt.Sprintf("*_upd_%s.lock", l.fileName))
 	if err != nil {
 		return err
@@ -125,7 +128,7 @@ func (l *Store) updateFromStoreFile(key []byte, buffer *bytes.Buffer) error {
 
 	for scanner.Scan() {
 		recordKey, _, exists := l.getKeyAndValueFromBuffer(bytes.NewBuffer(scanner.Bytes()))
-		if !exists || !bytes.Equal(recordKey, key) {
+		if !exists || recordKey != key {
 			if _, err := fmt.Fprintln(tempFile, scanner.Text()); err != nil {
 				return err
 			}
@@ -154,8 +157,8 @@ func (l *Store) Partition(dataDir, fileName string) (*Store, error) {
 }
 
 // Delete Removes a key from the store, it returns ErrKeyNotFound if the key does not exists into the store
-func (l *Store) Delete(key []byte) error {
-	if _, exists := l.keyCache[string(key)]; !exists {
+func (l *Store) Delete(key string) error {
+	if _, exists := l.keyCache[key]; !exists {
 		return ErrKeyNotFound
 	}
 
@@ -174,7 +177,7 @@ func (l *Store) Delete(key []byte) error {
 	found := false
 	for scanner.Scan() {
 		recordKey, _, exists := l.getKeyAndValueFromBuffer(bytes.NewBuffer(scanner.Bytes()))
-		if exists && bytes.Equal(recordKey, key) {
+		if exists && recordKey != key {
 			found = true
 			continue
 		}
@@ -190,13 +193,13 @@ func (l *Store) Delete(key []byte) error {
 		return err
 	}
 
-	delete(l.keyCache, string(key))
+	delete(l.keyCache, key)
 
 	return nil
 }
 
 // Get Find a value by its key, it returns ErrKeyNotFound if the key does not exists into the store
-func (l *Store) Get(key []byte) ([]byte, error) {
+func (l *Store) Get(key string) ([]byte, error) {
 	scanner, close, err := l.openStoreFileScanner(os.O_RDONLY)
 	if err != nil {
 		return nil, err
@@ -205,7 +208,7 @@ func (l *Store) Get(key []byte) ([]byte, error) {
 
 	for scanner.Scan() {
 		recordKey, recordValue, exists := l.getKeyAndValueFromBuffer(bytes.NewBuffer(scanner.Bytes()))
-		if !exists || !bytes.Equal(recordKey, key) {
+		if !exists || recordKey != key {
 			continue
 		}
 
@@ -216,18 +219,18 @@ func (l *Store) Get(key []byte) ([]byte, error) {
 }
 
 // Put Insert or delete a key-value record
-func (l *Store) Put(key, value []byte) error {
+func (l *Store) Put(key string, value []byte) error {
 	buffer, err := l.createRecordBuffer(key, value)
 	if err != nil {
 		return err
 	}
 
-	if _, exists := l.keyCache[string(key)]; exists {
+	if _, exists := l.keyCache[key]; exists {
 		if err := l.updateFromStoreFile(key, buffer); err != nil {
 			return err
 		}
 
-		l.keyCache[string(key)] = struct{}{}
+		l.keyCache[key] = struct{}{}
 		return nil
 	}
 
@@ -235,6 +238,6 @@ func (l *Store) Put(key, value []byte) error {
 		return err
 	}
 
-	l.keyCache[string(key)] = struct{}{}
+	l.keyCache[key] = struct{}{}
 	return nil
 }
