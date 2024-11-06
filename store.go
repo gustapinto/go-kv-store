@@ -24,6 +24,7 @@ var (
 	recordSeparator      = []byte("<split>")
 )
 
+// NewStore Create a new Store with the specified data directory and file name
 func NewStore(dataDir, fileName string) (*Store, error) {
 	absPath, err := filepath.Abs(dataDir)
 	if err != nil {
