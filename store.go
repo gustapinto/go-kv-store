@@ -10,8 +10,9 @@ import (
 	"path/filepath"
 )
 
-// Store Is the bas ekey-value store object
-type Store struct {
+// Collection Is the base key-value store object, think of it as a Directory or a Folder
+// for your records
+type Collection struct {
 	dataDir       string
 	fileName      string
 	storeFilePath string
@@ -24,8 +25,8 @@ var (
 	recordSeparator      = []byte("<split>")
 )
 
-// NewStore Create a new Store with the specified data directory and file name
-func NewStore(dataDir, fileName string) (*Store, error) {
+// NewCollection Create a new Store with the specified data directory and file name
+func NewCollection(dataDir, fileName string) (*Collection, error) {
 	absPath, err := filepath.Abs(dataDir)
 	if err != nil {
 		return nil, err
@@ -35,7 +36,7 @@ func NewStore(dataDir, fileName string) (*Store, error) {
 		return nil, err
 	}
 
-	store := &Store{
+	store := &Collection{
 		dataDir:       absPath,
 		fileName:      fileName,
 		storeFilePath: filepath.Join(absPath, fileName),
@@ -49,7 +50,7 @@ func NewStore(dataDir, fileName string) (*Store, error) {
 	return store, nil
 }
 
-func (*Store) createRecordBuffer(key string, value []byte) (*bytes.Buffer, error) {
+func (*Collection) createRecordBuffer(key string, value []byte) (*bytes.Buffer, error) {
 	var buffer bytes.Buffer
 	if _, err := fmt.Fprintf(&buffer, "%s%s%s", key, recordSeparator, value); err != nil {
 		return nil, err
@@ -58,7 +59,7 @@ func (*Store) createRecordBuffer(key string, value []byte) (*bytes.Buffer, error
 	return &buffer, nil
 }
 
-func (*Store) getKeyAndValueFromBuffer(buffer *bytes.Buffer) (string, []byte, bool) {
+func (*Collection) getKeyAndValueFromBuffer(buffer *bytes.Buffer) (string, []byte, bool) {
 	splitRecord := bytes.Split(buffer.Bytes(), recordSeparator)
 	if len(splitRecord) != 2 {
 		return "", nil, false
@@ -67,7 +68,7 @@ func (*Store) getKeyAndValueFromBuffer(buffer *bytes.Buffer) (string, []byte, bo
 	return string(splitRecord[0]), splitRecord[1], true
 }
 
-func (l *Store) openStoreFileScanner(flag int) (*bufio.Scanner, func() error, error) {
+func (l *Collection) openStoreFileScanner(flag int) (*bufio.Scanner, func() error, error) {
 	file, err := os.OpenFile(l.storeFilePath, flag, fs.FileMode(0755))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -83,7 +84,7 @@ func (l *Store) openStoreFileScanner(flag int) (*bufio.Scanner, func() error, er
 	return scanner, file.Close, nil
 }
 
-func (l *Store) loadKeyCacheFromStoreFile() error {
+func (l *Collection) loadKeyCacheFromStoreFile() error {
 	scanner, close, err := l.openStoreFileScanner(os.O_RDONLY)
 	if err != nil {
 		return err
@@ -99,7 +100,7 @@ func (l *Store) loadKeyCacheFromStoreFile() error {
 	return nil
 }
 
-func (l *Store) insertIntoStoreFile(buffer *bytes.Buffer) error {
+func (l *Collection) insertIntoStoreFile(buffer *bytes.Buffer) error {
 	file, err := os.OpenFile(l.storeFilePath, os.O_RDWR|os.O_APPEND|os.O_CREATE, fs.FileMode(0755))
 	if err != nil {
 		return err
@@ -113,7 +114,7 @@ func (l *Store) insertIntoStoreFile(buffer *bytes.Buffer) error {
 	return nil
 }
 
-func (l *Store) updateFromStoreFile(key string, buffer *bytes.Buffer) error {
+func (l *Collection) updateFromStoreFile(key string, buffer *bytes.Buffer) error {
 	tempFile, err := os.CreateTemp(l.dataDir, fmt.Sprintf("*_upd_%s.lock", l.fileName))
 	if err != nil {
 		return err
@@ -146,18 +147,18 @@ func (l *Store) updateFromStoreFile(key string, buffer *bytes.Buffer) error {
 	return nil
 }
 
-// Partition Creates a new Store using the caller Store dataDir as initial data path
-func (l *Store) Partition(dataDir, fileName string) (*Store, error) {
+// Collection Creates a new sub Collection, think of it as a subdirectory
+func (l *Collection) Collection(dataDir, fileName string) (*Collection, error) {
 	partitionPath, err := filepath.Abs(filepath.Join(l.dataDir, dataDir))
 	if err != nil {
 		return nil, err
 	}
 
-	return NewStore(partitionPath, fileName)
+	return NewCollection(partitionPath, fileName)
 }
 
 // Delete Removes a key from the store, it returns ErrKeyNotFound if the key does not exists into the store
-func (l *Store) Delete(key string) error {
+func (l *Collection) Delete(key string) error {
 	if _, exists := l.keyCache[key]; !exists {
 		return ErrKeyNotFound
 	}
@@ -199,7 +200,7 @@ func (l *Store) Delete(key string) error {
 }
 
 // Get Find a value by its key, it returns ErrKeyNotFound if the key does not exists into the store
-func (l *Store) Get(key string) ([]byte, error) {
+func (l *Collection) Get(key string) ([]byte, error) {
 	scanner, close, err := l.openStoreFileScanner(os.O_RDONLY)
 	if err != nil {
 		return nil, err
@@ -219,7 +220,7 @@ func (l *Store) Get(key string) ([]byte, error) {
 }
 
 // Put Insert or delete a key-value record
-func (l *Store) Put(key string, value []byte) error {
+func (l *Collection) Put(key string, value []byte) error {
 	buffer, err := l.createRecordBuffer(key, value)
 	if err != nil {
 		return err
