@@ -4,7 +4,7 @@ import "math/rand"
 
 var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ11234567890")
 
-func RandomString(size int) string {
+func generateRandomString(size int) string {
 	buffer := make([]rune, size)
 
 	for i := range buffer {
