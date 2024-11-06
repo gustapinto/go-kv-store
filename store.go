@@ -173,7 +173,7 @@ func (l *Store) Delete(key []byte) error {
 	found := false
 	for scanner.Scan() {
 		recordKey, _, exists := l.getKeyAndValueFromBuffer(bytes.NewBuffer(scanner.Bytes()))
-		if exists || bytes.Equal(recordKey, key) {
+		if exists && bytes.Equal(recordKey, key) {
 			found = true
 			continue
 		}
