@@ -21,7 +21,7 @@ type Store struct {
 var (
 	ErrKeyNotFound       = errors.New("key not found in store")
 	ErrStoreFileNotFound = errors.New("store file not found")
-	recodSeparator       = []byte("<split>")
+	recordSeparator      = []byte("<split>")
 )
 
 func NewStore(dataDir, fileName string) (*Store, error) {
@@ -49,13 +49,13 @@ func NewStore(dataDir, fileName string) (*Store, error) {
 }
 
 func (*Store) createRecordBuffer(key, value []byte) (*bytes.Buffer, error) {
-	line := bytes.Join([][]byte{key, value}, recodSeparator)
+	line := bytes.Join([][]byte{key, value}, recordSeparator)
 
 	return bytes.NewBuffer(line), nil
 }
 
 func (*Store) getKeyAndValueFromBuffer(buffer *bytes.Buffer) ([]byte, []byte, bool) {
-	splitRecord := bytes.Split(buffer.Bytes(), recodSeparator)
+	splitRecord := bytes.Split(buffer.Bytes(), recordSeparator)
 	if len(splitRecord) != 2 {
 		return nil, nil, false
 	}
