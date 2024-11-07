@@ -1,14 +1,40 @@
+/*
+A golang embeddable key-value store based on protobuf files. All operations are
+sync and should not be considered safe for concurrent scenarios unless the
+concurrency details (locking, etc...) is handled by the consumer.
+
+This library works with collections of key-value records, with each collection
+representing a directory on your file system and each ke-value records a binary
+protobuf (.binpb) file
+
+Note that creating a Collection object with the [NewCollection] or [the collection.Collection]
+methods is not free, as it will index every compatible file under the dataDir
+directory, if you need to save a lot of records is recommended that you use
+multiple partitions for it and allocated the collections on your application
+startup process
+
+Performance considerations:
+  - Memory wise this lirary will create a map[string]string index, where the keys are
+    your keys (provided on the Put method) and the values are uuid v4 fileIds
+  - Takes a average of 40-45 seconds to put a million files consisting of a uuid v4 key
+    and a 5 paragraph lorem ipsum body
+  - It takes a average of 30-40  seconds to index a million files consisting of a uuid v4 key
+    and a 5 paragraph lorem ipsum body
+
+Machine used for performance testing:
+  - Core i5 94000f
+  - 16gb ram
+  - entry-level 120gb SATA3 SSD
+*/
 package gokvstore
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/google/uuid"
 	"github.com/gustapinto/go-kv-store/gen"
@@ -20,12 +46,13 @@ import (
 type Collection struct {
 	dataDir            string
 	keyToFileIdMapping map[string]string
-	mu                 sync.Mutex
 }
 
 var ErrKeyNotFound = errors.New("key not found in store")
 
-// NewCollection Create a new Store with the specified data directory and file name
+const protobufBinaryExtension = ".binpb"
+
+// NewCollection Create a new collection of records.
 func NewCollection(dataDir string) (*Collection, error) {
 	absPath, err := filepath.Abs(dataDir)
 	if err != nil {
@@ -52,42 +79,38 @@ func NewCollection(dataDir string) (*Collection, error) {
 func (c *Collection) getFilePathFromFileId(fileId string) string {
 	builder := strings.Builder{}
 	builder.WriteString(fileId)
-	builder.WriteString(".binpb")
+	builder.WriteString(protobufBinaryExtension)
 
 	return filepath.Join(c.dataDir, builder.String())
 }
 
-func (c *Collection) loadKeyToFileIdMapping(root string) error {
-	entries, err := os.ReadDir(root)
+func (c *Collection) loadKeyToFileIdMapping(dataDir string) error {
+	builder := strings.Builder{}
+	builder.WriteString(dataDir)
+	builder.WriteString("/*")
+	builder.WriteString(protobufBinaryExtension)
+
+	paths, err := filepath.Glob(filepath.Clean(builder.String()))
 	if err != nil {
 		return err
 	}
 
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		file, err := os.Open(filepath.Join(root, entry.Name()))
+	for _, path := range paths {
+		file, err := os.Open(path)
 		if err != nil {
-			fmt.Println(err.Error())
-			continue
+			return err
 		}
+		defer file.Close()
 
 		buffer, err := io.ReadAll(file)
 		if err != nil {
-			fmt.Println(err.Error())
-			continue
+			return err
 		}
 
 		var record gen.Record
 		if err := proto.Unmarshal(buffer, &record); err != nil {
-			fmt.Println(err.Error())
-			continue
+			return err
 		}
-
-		c.mu.Lock()
-		defer c.mu.Unlock()
 
 		c.keyToFileIdMapping[record.Key] = record.Id
 	}
@@ -95,7 +118,8 @@ func (c *Collection) loadKeyToFileIdMapping(root string) error {
 	return nil
 }
 
-// Collection Creates a new sub Collection, think of it as a subdirectory
+// Collection Creates a new sub Collection. See [Collection.NewCollection] godoc
+// for more details
 func (c *Collection) Collection(dataDir, fileName string) (*Collection, error) {
 	partitionPath, err := filepath.Abs(filepath.Join(c.dataDir, dataDir))
 	if err != nil {
