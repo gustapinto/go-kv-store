@@ -7,8 +7,6 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gustapinto/go-kv-store/gen"
 	"google.golang.org/protobuf/proto"
@@ -16,37 +14,23 @@ import (
 
 // s3RecordStore A AWS S3 based record store
 type s3RecordStore struct {
-	bucket    string
-	dir       string
-	accessKey string
-	secretKey string
-	region    string
-	client    *s3.Client
+	bucket string
+	dir    string
+	config aws.Config
+	client *s3.Client
 }
 
 var _ recordStore = (*s3RecordStore)(nil)
 
 // NewS3RecordStore Create a new [s3RecordStore]
-func NewS3RecordStore(bucket, dir, accessKey, secretKey, region string) *s3RecordStore {
-	credentialsProvider := credentials.NewStaticCredentialsProvider(accessKey, secretKey, "")
-	config, err := config.LoadDefaultConfig(
-		context.Background(),
-		config.WithCredentialsProvider(credentialsProvider),
-		config.WithRegion(region),
-	)
-	if err != nil {
-		return nil
-	}
-
+func NewS3RecordStore(bucket, dir string, config aws.Config) *s3RecordStore {
 	client := s3.NewFromConfig(config)
 
 	return &s3RecordStore{
-		bucket:    bucket,
-		dir:       dir,
-		accessKey: accessKey,
-		secretKey: secretKey,
-		region:    region,
-		client:    client,
+		bucket: bucket,
+		dir:    dir,
+		config: config,
+		client: client,
 	}
 }
 
@@ -87,7 +71,7 @@ func (s *s3RecordStore) makeStoreForCollection(dir string) (recordStore, error) 
 	builder.WriteString("/")
 	builder.WriteString(dir)
 
-	return NewS3RecordStore(s.bucket, builder.String(), s.accessKey, s.secretKey, s.region), nil
+	return NewS3RecordStore(s.bucket, builder.String(), s.config), nil
 }
 
 func (s *s3RecordStore) read(recordPath string) (*gen.Record, error) {
