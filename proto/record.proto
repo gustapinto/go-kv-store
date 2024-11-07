@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+option go_package = "github.com/gustapinto/go-kv-store/gen";
+
+message Record {
+    string id = 1;
+    string key = 2;
+    bytes value = 3;
+}

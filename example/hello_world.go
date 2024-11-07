@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	collection, err := gokvstore.NewCollection("data", "store.db")
+	collection, err := gokvstore.NewCollection("data")
 	if err != nil {
 		panic(err)
 	}

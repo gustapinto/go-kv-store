@@ -1,32 +1,32 @@
 package gokvstore
 
 import (
-	"bufio"
-	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
+
+	"github.com/google/uuid"
+	"github.com/gustapinto/go-kv-store/gen"
+	"google.golang.org/protobuf/proto"
 )
 
 // Collection Is the base key-value store object, think of it as a Directory or a Folder
 // for your records
 type Collection struct {
-	dataDir       string
-	fileName      string
-	storeFilePath string
-	keyCache      map[string]struct{}
+	dataDir            string
+	keyToFileIdMapping map[string]string
+	mu                 sync.Mutex
 }
 
-var (
-	ErrKeyNotFound       = errors.New("key not found in store")
-	ErrStoreFileNotFound = errors.New("store file not found")
-	recordSeparator      = []byte("<split>")
-)
+var ErrKeyNotFound = errors.New("key not found in store")
 
 // NewCollection Create a new Store with the specified data directory and file name
-func NewCollection(dataDir, fileName string) (*Collection, error) {
+func NewCollection(dataDir string) (*Collection, error) {
 	absPath, err := filepath.Abs(dataDir)
 	if err != nil {
 		return nil, err
@@ -37,208 +37,138 @@ func NewCollection(dataDir, fileName string) (*Collection, error) {
 	}
 
 	store := &Collection{
-		dataDir:       absPath,
-		fileName:      fileName,
-		storeFilePath: filepath.Join(absPath, fileName),
-		keyCache:      make(map[string]struct{}),
+		dataDir:            absPath,
+		keyToFileIdMapping: make(map[string]string),
 	}
 
-	if err := store.loadKeyCacheFromStoreFile(); err != nil && !errors.Is(err, ErrStoreFileNotFound) {
+	if err := store.loadKeyToFileIdMapping(store.dataDir); err != nil {
+
 		return nil, err
 	}
 
 	return store, nil
 }
 
-func (*Collection) createRecordBuffer(key string, value []byte) (*bytes.Buffer, error) {
-	var buffer bytes.Buffer
-	if _, err := fmt.Fprintf(&buffer, "%s%s%s", key, recordSeparator, value); err != nil {
-		return nil, err
-	}
+func (c *Collection) getFilePathFromFileId(fileId string) string {
+	builder := strings.Builder{}
+	builder.WriteString(fileId)
+	builder.WriteString(".binpb")
 
-	return &buffer, nil
+	return filepath.Join(c.dataDir, builder.String())
 }
 
-func (*Collection) getKeyAndValueFromBuffer(buffer *bytes.Buffer) (string, []byte, bool) {
-	splitRecord := bytes.Split(buffer.Bytes(), recordSeparator)
-	if len(splitRecord) != 2 {
-		return "", nil, false
-	}
-
-	return string(splitRecord[0]), splitRecord[1], true
-}
-
-func (l *Collection) openStoreFileScanner(flag int) (*bufio.Scanner, func() error, error) {
-	file, err := os.OpenFile(l.storeFilePath, flag, fs.FileMode(0755))
+func (c *Collection) loadKeyToFileIdMapping(root string) error {
+	entries, err := os.ReadDir(root)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil, ErrStoreFileNotFound
+		return err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
 		}
 
-		return nil, nil, err
-	}
-
-	scanner := bufio.NewScanner(file)
-	scanner.Split(bufio.ScanLines)
-
-	return scanner, file.Close, nil
-}
-
-func (l *Collection) loadKeyCacheFromStoreFile() error {
-	scanner, close, err := l.openStoreFileScanner(os.O_RDONLY)
-	if err != nil {
-		return err
-	}
-	defer close()
-
-	for scanner.Scan() {
-		if key, _, exists := l.getKeyAndValueFromBuffer(bytes.NewBuffer(scanner.Bytes())); exists {
-			l.keyCache[key] = struct{}{}
+		file, err := os.Open(filepath.Join(root, entry.Name()))
+		if err != nil {
+			fmt.Println(err.Error())
+			continue
 		}
-	}
 
-	return nil
-}
-
-func (l *Collection) insertIntoStoreFile(buffer *bytes.Buffer) error {
-	file, err := os.OpenFile(l.storeFilePath, os.O_RDWR|os.O_APPEND|os.O_CREATE, fs.FileMode(0755))
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	if _, err := fmt.Fprintln(file, buffer.String()); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (l *Collection) updateFromStoreFile(key string, buffer *bytes.Buffer) error {
-	tempFile, err := os.CreateTemp(l.dataDir, fmt.Sprintf("*_upd_%s.lock", l.fileName))
-	if err != nil {
-		return err
-	}
-	defer tempFile.Close()
-
-	scanner, close, err := l.openStoreFileScanner(os.O_RDWR | os.O_APPEND | os.O_CREATE)
-	if err != nil {
-		return err
-	}
-	defer close()
-
-	for scanner.Scan() {
-		recordKey, _, exists := l.getKeyAndValueFromBuffer(bytes.NewBuffer(scanner.Bytes()))
-		if !exists || recordKey != key {
-			if _, err := fmt.Fprintln(tempFile, scanner.Text()); err != nil {
-				return err
-			}
-		} else {
-			if _, err := fmt.Fprintln(tempFile, buffer.String()); err != nil {
-				return err
-			}
+		buffer, err := io.ReadAll(file)
+		if err != nil {
+			fmt.Println(err.Error())
+			continue
 		}
-	}
 
-	if err := os.Rename(tempFile.Name(), l.storeFilePath); err != nil {
-		return err
+		var record gen.Record
+		if err := proto.Unmarshal(buffer, &record); err != nil {
+			fmt.Println(err.Error())
+			continue
+		}
+
+		c.mu.Lock()
+		defer c.mu.Unlock()
+
+		c.keyToFileIdMapping[record.Key] = record.Id
 	}
 
 	return nil
 }
 
 // Collection Creates a new sub Collection, think of it as a subdirectory
-func (l *Collection) Collection(dataDir, fileName string) (*Collection, error) {
-	partitionPath, err := filepath.Abs(filepath.Join(l.dataDir, dataDir))
+func (c *Collection) Collection(dataDir, fileName string) (*Collection, error) {
+	partitionPath, err := filepath.Abs(filepath.Join(c.dataDir, dataDir))
 	if err != nil {
 		return nil, err
 	}
 
-	return NewCollection(partitionPath, fileName)
+	return NewCollection(partitionPath)
 }
 
-// Delete Removes a key from the store, it returns ErrKeyNotFound if the key does not exists into the store
-func (l *Collection) Delete(key string) error {
-	if _, exists := l.keyCache[key]; !exists {
+// Delete Deletes a record from disk, it returns ErrKeyNotFound if the key does not exists in the collection
+func (c *Collection) Delete(key string) error {
+	fileId, exists := c.keyToFileIdMapping[key]
+	if !exists {
 		return ErrKeyNotFound
 	}
 
-	tempFile, err := os.CreateTemp(l.dataDir, fmt.Sprintf("*_del_%s.lock", l.fileName))
-	if err != nil {
-		return err
-	}
-	defer tempFile.Close()
-
-	scanner, close, err := l.openStoreFileScanner(os.O_RDWR | os.O_APPEND | os.O_CREATE)
-	if err != nil {
-		return err
-	}
-	defer close()
-
-	found := false
-	for scanner.Scan() {
-		recordKey, _, exists := l.getKeyAndValueFromBuffer(bytes.NewBuffer(scanner.Bytes()))
-		if exists && recordKey != key {
-			found = true
-			continue
-		}
-
-		fmt.Fprintln(tempFile, scanner.Text())
-	}
-
-	if !found {
-		return ErrKeyNotFound
-	}
-
-	if err := os.Rename(tempFile.Name(), l.storeFilePath); err != nil {
-		return err
-	}
-
-	delete(l.keyCache, key)
-
-	return nil
+	return os.Remove(c.getFilePathFromFileId(fileId))
 }
 
-// Get Find a value by its key, it returns ErrKeyNotFound if the key does not exists into the store
-func (l *Collection) Get(key string) ([]byte, error) {
-	scanner, close, err := l.openStoreFileScanner(os.O_RDONLY)
+// Get Find a value by its key, it returns ErrKeyNotFound if the key does not exists in the collection
+func (c *Collection) Get(key string) ([]byte, error) {
+	fileId, exists := c.keyToFileIdMapping[key]
+	if !exists {
+		return nil, ErrKeyNotFound
+	}
+
+	file, err := os.OpenFile(c.getFilePathFromFileId(fileId), os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		return nil, err
 	}
-	defer close()
+	defer file.Close()
 
-	for scanner.Scan() {
-		recordKey, recordValue, exists := l.getKeyAndValueFromBuffer(bytes.NewBuffer(scanner.Bytes()))
-		if !exists || recordKey != key {
-			continue
-		}
-
-		return recordValue, nil
+	buffer, err := io.ReadAll(file)
+	if err != nil {
+		return nil, err
 	}
 
-	return nil, ErrKeyNotFound
+	var record gen.Record
+	if err := proto.Unmarshal(buffer, &record); err != nil {
+		return nil, err
+	}
+
+	return record.Value, nil
 }
 
-// Put Insert or delete a key-value record
-func (l *Collection) Put(key string, value []byte) error {
-	buffer, err := l.createRecordBuffer(key, value)
+// Put Insert or update (Upsert) a record
+func (c *Collection) Put(key string, value []byte) error {
+	id := uuid.New().String()
+	if fileId, exists := c.keyToFileIdMapping[key]; exists {
+		id = fileId
+	}
+
+	record := &gen.Record{
+		Id:    id,
+		Key:   key,
+		Value: value,
+	}
+
+	buffer, err := proto.Marshal(record)
 	if err != nil {
 		return err
 	}
 
-	if _, exists := l.keyCache[key]; exists {
-		if err := l.updateFromStoreFile(key, buffer); err != nil {
-			return err
-		}
-
-		l.keyCache[key] = struct{}{}
-		return nil
+	file, err := os.OpenFile(c.getFilePathFromFileId(record.Id), os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		return err
 	}
+	defer file.Close()
 
-	if err := l.insertIntoStoreFile(buffer); err != nil {
+	if _, err := file.Write(buffer); err != nil {
 		return err
 	}
 
-	l.keyCache[key] = struct{}{}
+	c.keyToFileIdMapping[key] = record.Id
 	return nil
 }
