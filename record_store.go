@@ -4,22 +4,22 @@ import (
 	"github.com/gustapinto/go-kv-store/gen"
 )
 
-type recordStore interface {
-	// list Lists all record paths in the store
-	list() ([]string, error)
+type RecordStore interface {
+	// List Lists all record paths in the store
+	List() ([]string, error)
 
-	// read Reads a record path into a [gen.Record]
-	read(recordPath string) (*gen.Record, error)
+	// Read Reads a record path into a [gen.Record]
+	Read(recordPath string) (*gen.Record, error)
 
-	// write Writes a [gen.Record] into the specified path
-	write(recordPath string, record *gen.Record) error
+	// Write Writes a [gen.Record] into the specified path
+	Write(recordPath string, record *gen.Record) error
 
-	// remove Delete a record
-	remove(recordPath string) error
+	// Remove Delete a record
+	Remove(recordPath string) error
 
-	// makeRecordPath Build a record path from its fileId
-	makeRecordPath(fileId string) string
+	// MakeRecordPath Build a record path from its fileId
+	MakeRecordPath(fileId string) string
 
-	// makeStoreForCollection Create a new store based on the actual for a sub collection
-	makeStoreForCollection(dir string) (recordStore, error)
+	// MakeStoreForCollection Create a new store based on the actual for a sub collection
+	MakeStoreForCollection(dir string) (RecordStore, error)
 }

@@ -11,15 +11,15 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// fsRecordStore A filesystem (local disk) based record store
-type fsRecordStore struct {
+// FsRecordStore A filesystem (local disk) based record store. Implements [RecordStore]
+type FsRecordStore struct {
 	dataDir string
 }
 
-var _ recordStore = (*fsRecordStore)(nil)
+var _ RecordStore = (*FsRecordStore)(nil)
 
-// NewFsRecordStore Create a new [fsRecordStore]
-func NewFsRecordStore(dataDir string) *fsRecordStore {
+// NewFsRecordStore Create a new [FsRecordStore]
+func NewFsRecordStore(dataDir string) *FsRecordStore {
 	absPath, err := filepath.Abs(dataDir)
 	if err != nil {
 		return nil
@@ -29,16 +29,15 @@ func NewFsRecordStore(dataDir string) *fsRecordStore {
 		return nil
 	}
 
-	return &fsRecordStore{
+	return &FsRecordStore{
 		dataDir: absPath,
 	}
 }
 
-func (f *fsRecordStore) list() (recordPaths []string, err error) {
+func (f *FsRecordStore) List() (recordPaths []string, err error) {
 	builder := strings.Builder{}
 	builder.WriteString(f.dataDir)
-	builder.WriteString("/*")
-	builder.WriteString(protobufBinaryExtension)
+	builder.WriteString("/*.binpb")
 
 	recordsGlobPattern := filepath.Clean(builder.String())
 	paths, err := filepath.Glob(recordsGlobPattern)
@@ -49,7 +48,7 @@ func (f *fsRecordStore) list() (recordPaths []string, err error) {
 	return paths, err
 }
 
-func (f *fsRecordStore) read(recordPath string) (*gen.Record, error) {
+func (f *FsRecordStore) Read(recordPath string) (*gen.Record, error) {
 	file, err := os.Open(recordPath)
 	if err != nil {
 		return nil, err
@@ -69,7 +68,7 @@ func (f *fsRecordStore) read(recordPath string) (*gen.Record, error) {
 	return &record, nil
 }
 
-func (f *fsRecordStore) remove(recordPath string) error {
+func (f *FsRecordStore) Remove(recordPath string) error {
 	if err := os.Remove(recordPath); err != nil {
 		return err
 	}
@@ -77,7 +76,7 @@ func (f *fsRecordStore) remove(recordPath string) error {
 	return nil
 }
 
-func (f *fsRecordStore) write(recordPath string, record *gen.Record) error {
+func (f *FsRecordStore) Write(recordPath string, record *gen.Record) error {
 	buffer, err := proto.Marshal(record)
 	if err != nil {
 		return err
@@ -96,15 +95,15 @@ func (f *fsRecordStore) write(recordPath string, record *gen.Record) error {
 	return nil
 }
 
-func (f *fsRecordStore) makeRecordPath(fileId string) string {
+func (f *FsRecordStore) MakeRecordPath(fileId string) string {
 	builder := strings.Builder{}
 	builder.WriteString(fileId)
-	builder.WriteString(protobufBinaryExtension)
+	builder.WriteString(".binpb")
 
 	return filepath.Join(f.dataDir, builder.String())
 }
 
-func (f *fsRecordStore) makeStoreForCollection(dir string) (recordStore, error) {
+func (f *FsRecordStore) MakeStoreForCollection(dir string) (RecordStore, error) {
 	collectionPath, err := filepath.Abs(filepath.Join(f.dataDir, dir))
 	if err != nil {
 		return nil, err

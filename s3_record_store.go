@@ -12,21 +12,21 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// s3RecordStore A AWS S3 based record store
-type s3RecordStore struct {
+// S3RecordStore A AWS S3 based record store. Implements [RecordStore]
+type S3RecordStore struct {
 	bucket string
 	dir    string
 	config aws.Config
 	client *s3.Client
 }
 
-var _ recordStore = (*s3RecordStore)(nil)
+var _ RecordStore = (*S3RecordStore)(nil)
 
-// NewS3RecordStore Create a new [s3RecordStore]
-func NewS3RecordStore(bucket, dir string, config aws.Config) *s3RecordStore {
+// NewS3RecordStore Create a new [S3RecordStore]
+func NewS3RecordStore(bucket, dir string, config aws.Config) *S3RecordStore {
 	client := s3.NewFromConfig(config)
 
-	return &s3RecordStore{
+	return &S3RecordStore{
 		bucket: bucket,
 		dir:    dir,
 		config: config,
@@ -34,7 +34,7 @@ func NewS3RecordStore(bucket, dir string, config aws.Config) *s3RecordStore {
 	}
 }
 
-func (s *s3RecordStore) list() ([]string, error) {
+func (s *S3RecordStore) List() ([]string, error) {
 	paginator := s3.NewListObjectsV2Paginator(s.client, &s3.ListObjectsV2Input{
 		Bucket: aws.String(s.bucket),
 		Prefix: aws.String(s.dir),
@@ -55,17 +55,17 @@ func (s *s3RecordStore) list() ([]string, error) {
 	return paths, nil
 }
 
-func (s *s3RecordStore) makeRecordPath(fileId string) string {
+func (s *S3RecordStore) MakeRecordPath(fileId string) string {
 	builder := strings.Builder{}
 	builder.WriteString(s.dir)
 	builder.WriteString("/")
 	builder.WriteString(fileId)
-	builder.WriteString(protobufBinaryExtension)
+	builder.WriteString(".binpb")
 
 	return builder.String()
 }
 
-func (s *s3RecordStore) makeStoreForCollection(dir string) (recordStore, error) {
+func (s *S3RecordStore) MakeStoreForCollection(dir string) (RecordStore, error) {
 	builder := strings.Builder{}
 	builder.WriteString(s.dir)
 	builder.WriteString("/")
@@ -74,7 +74,7 @@ func (s *s3RecordStore) makeStoreForCollection(dir string) (recordStore, error) 
 	return NewS3RecordStore(s.bucket, builder.String(), s.config), nil
 }
 
-func (s *s3RecordStore) read(recordPath string) (*gen.Record, error) {
+func (s *S3RecordStore) Read(recordPath string) (*gen.Record, error) {
 	obj, err := s.client.GetObject(context.Background(), &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(recordPath),
@@ -97,11 +97,19 @@ func (s *s3RecordStore) read(recordPath string) (*gen.Record, error) {
 	return &record, nil
 }
 
-func (s *s3RecordStore) remove(recordPath string) error {
-	panic("unimplemented")
+func (s *S3RecordStore) Remove(recordPath string) error {
+	_, err := s.client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(recordPath),
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func (s *s3RecordStore) write(recordPath string, record *gen.Record) error {
+func (s *S3RecordStore) Write(recordPath string, record *gen.Record) error {
 	buffer, err := proto.Marshal(record)
 	if err != nil {
 		return err
