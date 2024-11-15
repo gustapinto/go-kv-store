@@ -22,4 +22,7 @@ type RecordStore interface {
 
 	// MakeStoreForCollection Create a new store based on the actual for a sub collection
 	MakeStoreForCollection(dir string) (RecordStore, error)
+
+	// Truncate Deletes the store data directory
+	Truncate() error
 }

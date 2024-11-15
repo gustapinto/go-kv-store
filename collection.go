@@ -164,3 +164,8 @@ func (c *Collection) Put(key string, value []byte, cacheable bool) error {
 
 	return nil
 }
+
+// Truncate Delete the [Collection] entire data directory
+func (c *Collection) Truncate() error {
+	return c.store.Truncate()
+}

@@ -56,3 +56,8 @@ func (i *InMemoryStore) Write(recordPath string, record *gen.Record) error {
 
 	return nil
 }
+
+func (i *InMemoryStore) Truncate() error {
+	i.data = make(map[string]*gen.Record)
+	return nil
+}

@@ -111,3 +111,11 @@ func (f *FsRecordStore) MakeStoreForCollection(dir string) (RecordStore, error) 
 
 	return NewFsRecordStore(collectionPath), nil
 }
+
+func (f *FsRecordStore) Truncate() error {
+	if err := os.RemoveAll(f.dataDir); err != nil {
+		return err
+	}
+
+	return nil
+}

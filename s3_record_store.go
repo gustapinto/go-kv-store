@@ -126,3 +126,14 @@ func (s *S3RecordStore) Write(recordPath string, record *gen.Record) error {
 
 	return nil
 }
+
+func (s *S3RecordStore) Truncate() error {
+	_, err := s.client.DeleteBucket(context.Background(), &s3.DeleteBucketInput{
+		Bucket: aws.String(s.bucket),
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
