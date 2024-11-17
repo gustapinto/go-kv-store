@@ -27,3 +27,4 @@ go.work.sum
 # custom
 example/**/data/
 .idea/
+.vscode/

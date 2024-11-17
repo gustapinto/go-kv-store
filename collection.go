@@ -2,6 +2,8 @@ package gokvstore
 
 import (
 	"errors"
+	"iter"
+	"maps"
 	"strings"
 
 	"github.com/google/uuid"
@@ -30,7 +32,7 @@ func NewCollection(store RecordStore) (*Collection, error) {
 		cache:              make(map[string][]byte),
 	}
 
-	if err := collection.loadKeyToFileIdMapping(); err != nil {
+	if err := collection.indexKeysAndFileIds(); err != nil {
 		return nil, err
 	}
 
@@ -53,7 +55,7 @@ func (*Collection) validateValue(value []byte) error {
 	return nil
 }
 
-func (c *Collection) loadKeyToFileIdMapping() error {
+func (c *Collection) indexKeysAndFileIds() error {
 	paths, err := c.store.List()
 	if err != nil {
 		return err
@@ -75,7 +77,7 @@ func (c *Collection) loadKeyToFileIdMapping() error {
 	return nil
 }
 
-// NewCollection Creates a new sub NewCollection. See [Collection.NewCollection] godoc
+// NewCollection Creates a new sub NewCollection. See [NewCollection] godoc
 // for more details
 func (c *Collection) NewCollection(dataDir string) (*Collection, error) {
 	store, err := c.store.MakeStoreForCollection(dataDir)
@@ -123,12 +125,11 @@ func (c *Collection) Get(key string) ([]byte, error) {
 	return record.Value, nil
 }
 
-// Put Insert or update (Upsert) a record
+// Put Insert or update a record
 //
 // The "cacheable" parameter controls if the record must also be cached on memory, for
-// faster retrieval, updates and inserts are persisted as normal
-//
-// Cacheable records will be indexed on Collection creation
+// faster retrieval, updates and inserts are persisted as normal and does not benefits
+// from "cacheable", these records will be indexed on [NewCollection] calls
 func (c *Collection) Put(key string, value []byte, cacheable bool) error {
 	if err := c.validateKey(key); err != nil {
 		return err
@@ -165,7 +166,20 @@ func (c *Collection) Put(key string, value []byte, cacheable bool) error {
 	return nil
 }
 
-// Truncate Delete the [Collection] entire data directory
+// Truncate Clears the [Collection] internal caches and delete their entire data directory
 func (c *Collection) Truncate() error {
+	clear(c.keyToFileIdMapping)
+	clear(c.cache)
+
 	return c.store.Truncate()
+}
+
+// Keys Returns an [iter.Seq] for the keys in this collection
+func (c *Collection) Keys() iter.Seq[string] {
+	return maps.Keys(c.keyToFileIdMapping)
+}
+
+// CachedKeys Returns an [iter.Seq] for the cached keys in this collection
+func (c *Collection) CachedKeys() iter.Seq[string] {
+	return maps.Keys(c.cache)
 }
