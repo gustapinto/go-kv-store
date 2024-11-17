@@ -183,3 +183,9 @@ func (c *Collection) Keys() iter.Seq[string] {
 func (c *Collection) CachedKeys() iter.Seq[string] {
 	return maps.Keys(c.cache)
 }
+
+// Exists Checks if a key exists in the [Collection]
+func (c *Collection) Exists(key string) bool {
+	_, exists := c.keyToFileIdMapping[key]
+	return exists
+}
