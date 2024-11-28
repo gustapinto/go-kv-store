@@ -1,12 +1,14 @@
 package gokvstore
 
 import (
+	"errors"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/gustapinto/go-kv-store/gen"
 	"google.golang.org/protobuf/proto"
 )
@@ -76,23 +78,53 @@ func (f *FsRecordStore) Remove(recordPath string) error {
 	return nil
 }
 
-func (f *FsRecordStore) Write(recordPath string, record *gen.Record) error {
-	buffer, err := proto.Marshal(record)
-	if err != nil {
-		return err
-	}
-
+func (f *FsRecordStore) createRecordFile(recordPath string, buffer []byte) error {
 	file, err := os.OpenFile(recordPath, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	if _, err := file.Write(buffer); err != nil {
+	_, err = file.Write(buffer)
+	return err
+}
+
+func (f *FsRecordStore) updateRecordFile(recordPath string, buffer []byte) error {
+	tempDir, err := os.MkdirTemp(f.dataDir, "tmp*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tempDir)
+
+	builder := strings.Builder{}
+	builder.WriteString(uuid.NewString())
+	builder.WriteString(".binpb")
+
+	tempFilePath := filepath.Join(tempDir, builder.String())
+	tempFile, err := os.OpenFile(tempFilePath, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		return err
+	}
+	defer tempFile.Close()
+
+	if _, err := tempFile.Write(buffer); err != nil {
 		return err
 	}
 
-	return nil
+	return os.Rename(tempFile.Name(), recordPath)
+}
+
+func (f *FsRecordStore) Write(recordPath string, record *gen.Record) error {
+	buffer, err := proto.Marshal(record)
+	if err != nil {
+		return err
+	}
+
+	if _, err := os.Stat(recordPath); errors.Is(err, os.ErrNotExist) {
+		return f.createRecordFile(recordPath, buffer)
+	}
+
+	return f.updateRecordFile(recordPath, buffer)
 }
 
 func (f *FsRecordStore) MakeRecordPath(fileId string) string {
