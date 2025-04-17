@@ -13,9 +13,9 @@ import (
 // Collection Is the base key-value store object, think of it as a directory or a folder
 // for your records
 type Collection struct {
-	keyToFileIdMapping map[string]string
-	cache              map[string][]byte
-	store              RecordStore
+	cache   map[string][]byte
+	store   RecordStore
+	catalog dataCatalog
 }
 
 var (
@@ -27,13 +27,22 @@ var (
 // NewCollection Create a new collection of records.
 func NewCollection(store RecordStore) (*Collection, error) {
 	collection := &Collection{
-		store:              store,
-		keyToFileIdMapping: make(map[string]string),
-		cache:              make(map[string][]byte),
+		store: store,
+		cache: make(map[string][]byte),
 	}
 
-	if err := collection.indexKeysAndFileIds(); err != nil {
-		return nil, err
+	if hasCatalog := collection.store.HasCatalog(); hasCatalog {
+		if err := collection.loadCatalog(); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := collection.indexKeysAndFileIds(); err != nil {
+			return nil, err
+		}
+
+		if err := collection.store.WriteCatalog(collection.catalog); err != nil {
+			return nil, err
+		}
 	}
 
 	return collection, nil
@@ -67,7 +76,9 @@ func (c *Collection) indexKeysAndFileIds() error {
 			return err
 		}
 
-		c.keyToFileIdMapping[record.Key] = record.Id
+		if err := c.addToCatalog(record); err != nil {
+			return err
+		}
 
 		if record.Cacheable {
 			c.cache[record.Key] = record.Value
@@ -94,12 +105,18 @@ func (c *Collection) Delete(key string) error {
 		return err
 	}
 
-	fileId, exists := c.keyToFileIdMapping[key]
+	entry, exists := c.catalog.Entries[key]
 	if !exists {
 		return ErrKeyNotFound
 	}
 
-	return c.store.Remove(c.store.MakeRecordPath(fileId))
+	if err := c.store.Remove(c.store.MakeRecordPath(entry.FileID)); err != nil {
+		return err
+	}
+
+	delete(c.catalog.Entries, key)
+
+	return c.store.WriteCatalog(c.catalog)
 }
 
 // Get Find a value by its key, it returns ErrKeyNotFound if the key does not exist in the collection
@@ -112,12 +129,12 @@ func (c *Collection) Get(key string) ([]byte, error) {
 		return value, nil
 	}
 
-	fileId, exists := c.keyToFileIdMapping[key]
+	entry, exists := c.catalog.Entries[key]
 	if !exists {
 		return nil, ErrKeyNotFound
 	}
 
-	record, err := c.store.Read(c.store.MakeRecordPath(fileId))
+	record, err := c.store.Read(c.store.MakeRecordPath(entry.FileID))
 	if err != nil {
 		return nil, err
 	}
@@ -140,8 +157,8 @@ func (c *Collection) Put(key string, value []byte, cacheable bool) error {
 	}
 
 	id := uuid.New().String()
-	if fileId, exists := c.keyToFileIdMapping[key]; exists {
-		id = fileId
+	if entry, exists := c.catalog.Entries[key]; exists {
+		id = entry.FileID
 	}
 
 	record := &gen.Record{
@@ -155,7 +172,13 @@ func (c *Collection) Put(key string, value []byte, cacheable bool) error {
 		return err
 	}
 
-	c.keyToFileIdMapping[record.Key] = record.Id
+	if err := c.addToCatalog(record); err != nil {
+		return err
+	}
+
+	if err := c.store.WriteCatalog(c.catalog); err != nil {
+		return err
+	}
 
 	if cacheable {
 		c.cache[record.Key] = record.Value
@@ -168,7 +191,7 @@ func (c *Collection) Put(key string, value []byte, cacheable bool) error {
 
 // Truncate Clears the [Collection] internal caches and delete their entire data directory
 func (c *Collection) Truncate() error {
-	clear(c.keyToFileIdMapping)
+	clear(c.catalog.Entries)
 	clear(c.cache)
 
 	return c.store.Truncate()
@@ -176,7 +199,7 @@ func (c *Collection) Truncate() error {
 
 // Keys Returns an [iter.Seq] for the keys in this collection
 func (c *Collection) Keys() iter.Seq[string] {
-	return maps.Keys(c.keyToFileIdMapping)
+	return maps.Keys(c.catalog.Entries)
 }
 
 // CachedKeys Returns an [iter.Seq] for the cached keys in this collection
@@ -186,6 +209,37 @@ func (c *Collection) CachedKeys() iter.Seq[string] {
 
 // Exists Checks if a key exists in the [Collection]
 func (c *Collection) Exists(key string) bool {
-	_, exists := c.keyToFileIdMapping[key]
+	_, exists := c.catalog.Entries[key]
 	return exists
+}
+
+func (c *Collection) loadCatalog() error {
+	catalog, err := c.store.ReadCatalog()
+	if err != nil {
+		return err
+	}
+
+	if catalog != nil {
+		c.catalog = *catalog
+	}
+
+	return nil
+}
+
+func (c *Collection) addToCatalog(record *gen.Record) error {
+	if c.catalog.Entries == nil {
+		c.catalog.Entries = make(map[string]dataCatalogEntry)
+	}
+
+	c.catalog.Entries[record.Key] = dataCatalogEntry{
+		Key:       record.Key,
+		FileID:    record.Id,
+		Cacheable: record.Cacheable,
+	}
+
+	if record.Cacheable {
+		c.cache[record.Key] = record.Value
+	}
+
+	return nil
 }

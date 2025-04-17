@@ -17,12 +17,21 @@ type RecordStore interface {
 	// Remove Delete a record
 	Remove(recordPath string) error
 
-	// MakeRecordPath Build a record path from its fileId
-	MakeRecordPath(fileId string) string
+	// MakeRecordPath Build a record path from its filePath
+	MakeRecordPath(filePath string) string
 
 	// MakeStoreForCollection Create a new store based on the actual for a sub collection
 	MakeStoreForCollection(dir string) (RecordStore, error)
 
 	// Truncate Deletes the store data directory
 	Truncate() error
+
+	// HasCatalog Checks if a data catalog exists for this store
+	HasCatalog() bool
+
+	// ReadCatalog Get the data catalog for this store
+	ReadCatalog() (*dataCatalog, error)
+
+	// WriteCatalog Write the data catalog for this store
+	WriteCatalog(catalog dataCatalog) error
 }

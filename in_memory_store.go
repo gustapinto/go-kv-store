@@ -8,7 +8,8 @@ import (
 // recommended, as it exists mainly to simplify internal library testing and does
 // not support some features (ex: sub collections). Implements [RecordStore]
 type InMemoryStore struct {
-	data map[string]*gen.Record
+	data    map[string]*gen.Record
+	catalog dataCatalog
 }
 
 var _ RecordStore = (*InMemoryStore)(nil)
@@ -59,5 +60,18 @@ func (i *InMemoryStore) Write(recordPath string, record *gen.Record) error {
 
 func (i *InMemoryStore) Truncate() error {
 	i.data = make(map[string]*gen.Record)
+	return nil
+}
+
+func (i *InMemoryStore) HasCatalog() bool {
+	return len(i.catalog.Entries) > 0
+}
+
+func (i *InMemoryStore) ReadCatalog() (*dataCatalog, error) {
+	return &i.catalog, nil
+}
+
+func (i *InMemoryStore) WriteCatalog(catalog dataCatalog) error {
+	i.catalog = catalog
 	return nil
 }

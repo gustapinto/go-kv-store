@@ -1,6 +1,7 @@
 package gokvstore
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"io/fs"
@@ -150,4 +151,61 @@ func (f *FsRecordStore) Truncate() error {
 	}
 
 	return nil
+}
+
+func (f *FsRecordStore) HasCatalog() bool {
+	_, err := os.Stat(f.catalogPath())
+
+	return !os.IsNotExist(err)
+}
+
+func (f *FsRecordStore) ReadCatalog() (*dataCatalog, error) {
+	catalogBuffer, err := os.ReadFile(f.catalogPath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, ErrCatalogDoesNotExists
+		}
+
+		return nil, err
+	}
+
+	var catalog dataCatalog
+	if err := json.Unmarshal(catalogBuffer, &catalog); err != nil {
+		return nil, err
+	}
+
+	return &catalog, nil
+}
+
+func (f *FsRecordStore) WriteCatalog(catalog dataCatalog) error {
+	catalogBuffer, err := json.MarshalIndent(catalog, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	tempPath := f.tempCatalogPath()
+	file, err := os.OpenFile(tempPath, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	if _, err = file.Write(catalogBuffer); err != nil {
+		return err
+	}
+
+	return os.Rename(tempPath, f.catalogPath())
+}
+
+func (f *FsRecordStore) catalogPath() string {
+	return filepath.Join(f.dataDir, "_catalog.json")
+}
+
+func (f *FsRecordStore) tempCatalogPath() string {
+	builder := strings.Builder{}
+	builder.WriteString("_catalog_")
+	builder.WriteString(uuid.NewString())
+	builder.WriteString(".json")
+
+	return filepath.Join(f.dataDir, builder.String())
 }

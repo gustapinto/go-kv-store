@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/google/uuid"
 	"github.com/gustapinto/go-kv-store/gen"
 	"google.golang.org/protobuf/proto"
 )
@@ -136,4 +137,37 @@ func (s *S3RecordStore) Truncate() error {
 	}
 
 	return nil
+}
+
+func (s *S3RecordStore) HasCatalog() bool {
+	// TODO
+	return false
+}
+
+func (s *S3RecordStore) ReadCatalog() (*dataCatalog, error) {
+	// TODO
+	return nil, nil
+}
+
+func (s *S3RecordStore) WriteCatalog(catalog dataCatalog) error {
+	// TODO
+	return nil
+}
+
+func (s *S3RecordStore) catalogPath() string {
+	builder := strings.Builder{}
+	builder.WriteString(s.dir)
+	builder.WriteString("/_catalog.json")
+
+	return builder.String()
+}
+
+func (s *S3RecordStore) tempCatalogPath() string {
+	builder := strings.Builder{}
+	builder.WriteString(s.dir)
+	builder.WriteString("/_catalog_")
+	builder.WriteString(uuid.NewString())
+	builder.WriteString(".json")
+
+	return builder.String()
 }
