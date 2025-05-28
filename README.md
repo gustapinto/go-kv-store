@@ -5,7 +5,7 @@ A golang embeddable Key-Value store
 ## Installation
 
 ```bash
-go get -u github.com/gustapinto/go-kv-store/v2@v2.0.0
+go get -u github.com/gustapinto/go-kv-store/v2
 ```
 
 ## Example
