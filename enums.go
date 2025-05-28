@@ -1,4 +1,4 @@
-package kv
+package gokvstore
 
 // CatalogLoadingStrategy The catalog loading strategy
 type CatalogLoadingStrategy uint

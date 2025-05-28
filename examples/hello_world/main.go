@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/gustapinto/go-kv-store/kv"
-	"github.com/gustapinto/go-kv-store/kv/catalog"
+	kv "github.com/gustapinto/go-kv-store"
+	"github.com/gustapinto/go-kv-store/catalog"
 )
 
 const (

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gustapinto/go-kv-store/kv"
-	"github.com/gustapinto/go-kv-store/kv/catalog"
+	kv "github.com/gustapinto/go-kv-store"
+	"github.com/gustapinto/go-kv-store/catalog"
 )
 
 func main() {

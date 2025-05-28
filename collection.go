@@ -1,11 +1,11 @@
-package kv
+package gokvstore
 
 import (
 	"errors"
 	"os"
 	"sync"
 
-	"github.com/gustapinto/go-kv-store/kv/catalog"
+	"github.com/gustapinto/go-kv-store/catalog"
 )
 
 // Collection A Key-Value data collection
@@ -84,7 +84,7 @@ func (c *Collection) Set(key string, value []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	log := catalog.NewLog(catalog.Set, key, nil)
+	log := catalog.NewLog(catalog.Set, key, value)
 	if err := c.catalog.Append(log); err != nil {
 		return err
 	}
