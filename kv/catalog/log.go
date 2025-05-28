@@ -17,6 +17,7 @@ type Log struct {
 	Ts int64 `json:"ts"`
 }
 
+// NewLog Initialize a usable [Log]
 func NewLog(op Operation, key string, value []byte) *Log {
 	return &Log{
 		Op:    op,

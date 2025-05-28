@@ -11,7 +11,7 @@ import (
 func main() {
 	start := time.Now()
 
-	catalog := catalog.NewJSONL("./catalog.jsonl", catalog.Buffered)
+	catalog := catalog.NewLocal("./catalog.jsonl", catalog.Buffered)
 	col, err := kv.NewCollection(catalog, kv.LazyLoad)
 	if err != nil {
 		panic(err)

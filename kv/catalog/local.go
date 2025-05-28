@@ -3,37 +3,42 @@ package catalog
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 )
 
-// JSONL Implements an append-only log based on the JSON Lines file format
-type JSONL struct {
+// Local Implements an append-only-log catalog based on the JSON Lines file format
+type Local struct {
 	filename  string
 	writeMode WriteMode
 }
 
-// NewJSONL Initialize a usable [NewJSONL] catalog
-func NewJSONL(filename string, writeMode WriteMode) *JSONL {
+// NewLocal Initialize a usable [NewLocal] catalog
+func NewLocal(filename string, writeMode WriteMode) *Local {
 	if writeMode > 1 {
 		writeMode = Sync
 	}
 
-	return &JSONL{
+	return &Local{
 		filename:  filename,
 		writeMode: writeMode,
 	}
 }
 
-// Log Add a new line to the append-only catalog file
-func (c *JSONL) Log(op Operation, key string, value []byte) error {
+// Append Add a new line to the append-only catalog file
+func (c *Local) Append(log *Log) error {
+	if log == nil {
+		return errors.New("log cannot be nil")
+	}
+
 	logFile, err := os.OpenFile(c.filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		return err
 	}
 	defer logFile.Close()
 
-	logJson, err := json.Marshal(NewLog(op, key, value))
+	logJson, err := json.Marshal(log)
 	if err != nil {
 		return err
 	}
@@ -50,7 +55,7 @@ func (c *JSONL) Log(op Operation, key string, value []byte) error {
 }
 
 // Iter Iterate over every entry in the catalog file, applying the callback to every log
-func (c *JSONL) Iter(callback func(log *Log) (shouldContinue bool)) error {
+func (c *Local) Iter(callback func(log *Log) (shouldContinue bool)) error {
 	if callback == nil {
 		return nil
 	}

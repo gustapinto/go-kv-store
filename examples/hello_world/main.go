@@ -12,7 +12,7 @@ const (
 )
 
 func main() {
-	catalog := catalog.NewJSONL("./hello_world_catalog.jsonl", catalog.Sync)
+	catalog := catalog.NewLocal("./hello_world_catalog.jsonl", catalog.Sync)
 	col, err := kv.NewCollection(catalog, kv.EagerLoad)
 	if err != nil {
 		panic(err)

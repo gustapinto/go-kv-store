@@ -84,7 +84,8 @@ func (c *Collection) Set(key string, value []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if err := c.catalog.Log(catalog.Set, key, value); err != nil {
+	log := catalog.NewLog(catalog.Set, key, nil)
+	if err := c.catalog.Append(log); err != nil {
 		return err
 	}
 
@@ -102,7 +103,8 @@ func (c *Collection) Del(key string) error {
 		return nil
 	}
 
-	if err := c.catalog.Log(catalog.Del, key, nil); err != nil {
+	log := catalog.NewLog(catalog.Del, key, nil)
+	if err := c.catalog.Append(log); err != nil {
 		return err
 	}
 
