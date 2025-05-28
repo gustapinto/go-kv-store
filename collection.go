@@ -5,7 +5,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/gustapinto/go-kv-store/catalog"
+	"github.com/gustapinto/go-kv-store/v2/catalog"
 )
 
 // Collection A Key-Value data collection

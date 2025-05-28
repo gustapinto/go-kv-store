@@ -1,6 +1,6 @@
 package gokvstore
 
-import "github.com/gustapinto/go-kv-store/catalog"
+import "github.com/gustapinto/go-kv-store/v2/catalog"
 
 // Catalog The interface implemented by the Key-Value providers, the catalogs are the
 // de-facto persistence layer of the Key-Value store
