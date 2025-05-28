@@ -8,13 +8,6 @@ import (
 	"github.com/gustapinto/go-kv-store/kv/catalog"
 )
 
-// Catalog The interface implemented by the Key-Value low level store providers
-type Catalog interface {
-	Log(op catalog.Operation, key string, value []byte) error
-
-	Iter(callback func(log *catalog.Log) (shouldContinue bool)) error
-}
-
 // Collection A Key-Value data collection
 type Collection struct {
 	mu                     sync.Mutex
@@ -150,4 +143,14 @@ func (c *Collection) Len() int64 {
 	}
 
 	return int64(len(c.state))
+}
+
+// Iter Over all elements in the collection, applying the callback to every element
+func (c *Collection) Iter(callback func(key string, value []byte) (shouldContinue bool)) {
+	for key, value := range c.state {
+		shouldContinue := callback(key, value)
+		if !shouldContinue {
+			break
+		}
+	}
 }

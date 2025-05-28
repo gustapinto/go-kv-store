@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"time"
 )
 
 // JSONL Implements an append-only log based on the JSON Lines file format
@@ -34,12 +33,7 @@ func (c *JSONL) Log(op Operation, key string, value []byte) error {
 	}
 	defer logFile.Close()
 
-	logJson, err := json.Marshal(Log{
-		Op:    op,
-		Key:   key,
-		Value: value,
-		Ts:    time.Now().UnixMilli(),
-	})
+	logJson, err := json.Marshal(NewLog(op, key, value))
 	if err != nil {
 		return err
 	}
@@ -55,7 +49,7 @@ func (c *JSONL) Log(op Operation, key string, value []byte) error {
 	return nil
 }
 
-// Iter Iterate over every entry in the catalog file, applying the callback to every log.
+// Iter Iterate over every entry in the catalog file, applying the callback to every log
 func (c *JSONL) Iter(callback func(log *Log) (shouldContinue bool)) error {
 	if callback == nil {
 		return nil
