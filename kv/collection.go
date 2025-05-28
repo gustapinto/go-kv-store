@@ -21,11 +21,11 @@ type Collection struct {
 // the collection loadingStrategy is equal to [EagerLoad]
 func NewCollection(catalog Catalog, loadingStrategy CatalogLoadingStrategy) (*Collection, error) {
 	if catalog == nil {
-		return nil, errors.New("the catalog must not be nil")
+		return nil, errors.New("invalid catalog")
 	}
 
-	if loadingStrategy > 3 {
-		return nil, errors.New("invalid CatalogLoadingStrategy")
+	if loadingStrategy > 2 {
+		return nil, errors.New("invalid loadingStrategy")
 	}
 
 	collection := Collection{
@@ -112,17 +112,15 @@ func (c *Collection) Del(key string) error {
 }
 
 // Get Find a Key-Value entry from the collection. It will also load the catalog with [Collection.LoadCatalog] if
-// the collection catalogLoadingStrategy is equal to [LazyLoad]
+// the collection catalogLoadingStrategy is [LazyLoad]
 func (c *Collection) Get(key string) ([]byte, bool) {
 	value, exists := c.state[key]
 	if exists {
 		return value, true
 	}
 
-	if !c.catalogLoaded && c.catalogLoadingStrategy == LazyLoad {
-		if err := c.LoadCatalog(); err != nil {
-			return nil, false
-		}
+	if err := c.lazyLoadCatalog(); err != nil {
+		return nil, false
 	}
 
 	value, exists = c.state[key]
@@ -134,23 +132,40 @@ func (c *Collection) Get(key string) ([]byte, bool) {
 }
 
 // Len Return the collection size. It will also load the catalog with [Collection.LoadCatalog] if
-// the collection catalogLoadingStrategy is equal to [LazyLoad]
-func (c *Collection) Len() int64 {
-	if !c.catalogLoaded && c.catalogLoadingStrategy == LazyLoad {
-		if err := c.LoadCatalog(); err != nil {
-			return 0
-		}
+// the collection catalogLoadingStrategy is [LazyLoad]
+func (c *Collection) Len() (int, error) {
+	if err := c.lazyLoadCatalog(); err != nil {
+		return 0, err
 	}
 
-	return int64(len(c.state))
+	return len(c.state), nil
 }
 
-// Iter Over all elements in the collection, applying the callback to every element
-func (c *Collection) Iter(callback func(key string, value []byte) (shouldContinue bool)) {
+// Iter Over all elements in the collection, applying the callback to every element. It will also load
+// the catalog with [Collection.LoadCatalog] if the collection catalogLoadingStrategy is [LazyLoad]
+//
+// This method does not iterate over the collection elements in order
+func (c *Collection) Iter(callback func(key string, value []byte) (shouldContinue bool)) error {
+	if err := c.lazyLoadCatalog(); err != nil {
+		return err
+	}
+
 	for key, value := range c.state {
 		shouldContinue := callback(key, value)
 		if !shouldContinue {
 			break
 		}
 	}
+
+	return nil
+}
+
+func (c *Collection) lazyLoadCatalog() error {
+	if !c.catalogLoaded && c.catalogLoadingStrategy == LazyLoad {
+		if err := c.LoadCatalog(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
