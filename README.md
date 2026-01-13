@@ -1,6 +1,6 @@
 # go-kv-store
 
-A golang embeddable Key-Value store
+A golang embeddable append-only, durable Key-Value store
 
 ## Installation
 

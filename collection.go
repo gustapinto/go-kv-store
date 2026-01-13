@@ -8,9 +8,9 @@ import (
 	"github.com/gustapinto/go-kv-store/v2/catalog"
 )
 
-// Collection A Key-Value data collection
+// Collection A Key-Value data collection, it can be considered safe for concurrente use cases
 type Collection struct {
-	mu                     sync.Mutex
+	mu                     sync.RWMutex
 	catalog                Catalog
 	catalogLoadingStrategy CatalogLoadingStrategy
 	catalogLoaded          bool
@@ -19,18 +19,22 @@ type Collection struct {
 
 // NewCollection Initializes a working [Collection]. It will also load the catalog with [Collection.LoadCatalog] if
 // the collection loadingStrategy is equal to [EagerLoad]
-func NewCollection(catalog Catalog, loadingStrategy CatalogLoadingStrategy) (*Collection, error) {
-	if catalog == nil {
-		return nil, errors.New("invalid catalog")
+//
+// The collection will be initialized with a non-durable [catalog.InMemory] catalog implementation if catalog_ is nil
+func NewCollection(catalog_ Catalog, loadingStrategy CatalogLoadingStrategy) (*Collection, error) {
+	if catalog_ == nil {
+		catalog_ = catalog.NewInMemory()
 	}
 
-	if loadingStrategy > 2 {
+	if loadingStrategy != EagerLoad &&
+		loadingStrategy != LazyLoad &&
+		loadingStrategy != ManualLoad {
 		return nil, errors.New("invalid loadingStrategy")
 	}
 
 	collection := Collection{
-		mu:                     sync.Mutex{},
-		catalog:                catalog,
+		mu:                     sync.RWMutex{},
+		catalog:                catalog_,
 		catalogLoadingStrategy: loadingStrategy,
 		catalogLoaded:          false,
 		state:                  map[string][]byte{},
@@ -79,7 +83,7 @@ func (c *Collection) LoadCatalog() error {
 	return nil
 }
 
-// Set Add a Key-Value entry to the collection
+// Set Overwrites a Key-Value pair entry in the collection
 func (c *Collection) Set(key string, value []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -114,8 +118,11 @@ func (c *Collection) Del(key string) error {
 }
 
 // Get Find a Key-Value entry from the collection. It will also load the catalog with [Collection.LoadCatalog] if
-// the collection catalogLoadingStrategy is [LazyLoad]
+// the collection catalogLoadingStrategy is [LazyLoad] and the key is not already present in the collection cache
 func (c *Collection) Get(key string) ([]byte, bool) {
+	c.mu.RLock()
+	defer d.mu.RUnlock()
+
 	value, exists := c.state[key]
 	if exists {
 		return value, true
@@ -136,6 +143,9 @@ func (c *Collection) Get(key string) ([]byte, bool) {
 // Len Return the collection size. It will also load the catalog with [Collection.LoadCatalog] if
 // the collection catalogLoadingStrategy is [LazyLoad]
 func (c *Collection) Len() (int, error) {
+	c.mu.RLock()
+	defer d.mu.RUnlock()
+
 	if err := c.lazyLoadCatalog(); err != nil {
 		return 0, err
 	}
@@ -148,6 +158,9 @@ func (c *Collection) Len() (int, error) {
 //
 // This method does not iterate over the collection elements in order
 func (c *Collection) Iter(callback func(key string, value []byte) (shouldContinue bool)) error {
+	c.mu.RLock()
+	defer d.mu.RUnlock()
+
 	if err := c.lazyLoadCatalog(); err != nil {
 		return err
 	}
